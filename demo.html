@@ -1,0 +1,910 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PDF Editor</title>
+    <style>
+        body {
+            margin: 0;
+            font-family: Arial, sans-serif;
+        }
+
+        .upload-section {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            height: 100vh;
+            background: #f0f0f0;
+        }
+
+        .upload-section h1 {
+            margin-bottom: 20px;
+        }
+
+        .upload-section input,
+        .upload-section button {
+            padding: 10px;
+            margin: 5px;
+        }
+
+        .editor-container {
+            display: flex;
+            height: 100vh;
+        }
+
+        .left-sidebar {
+            width: 200px;
+            padding: 10px;
+            background: #f8f8f8;
+            border-right: 1px solid #ccc;
+            overflow-y: auto;
+        }
+
+        .left-sidebar h3 {
+            margin: 0 0 10px;
+            font-size: 16px;
+        }
+
+        .preview-page {
+            width: 100%;
+            border: 1px solid #ccc;
+            margin-bottom: 10px;
+        }
+
+        .pdf-area {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .pdf-header {
+            padding: 10px;
+            background: #fff;
+            border-bottom: 1px solid #ccc;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .save-btn {
+            padding: 8px 16px;
+            background: #007bff;
+            color: #fff;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+
+        .save-btn:hover {
+            background: #0056b3;
+        }
+
+        .pdf-container {
+            flex: 1;
+            position: relative;
+            overflow: auto;
+            background: #e0e0e0;
+        }
+
+        .pdf-page {
+            position: relative;
+            margin: 20px auto;
+            box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
+        }
+
+        .draggable {
+            position: absolute;
+            border: 1px dashed #007bff;
+            background: rgba(255, 255, 255, 0.7);
+            z-index: 1000;
+            padding: 4px;
+            cursor: move;
+        }
+
+        .draggable[contenteditable="true"] {
+            cursor: text;
+        }
+
+        .draggable[contenteditable="true"]:focus {
+            outline: 1px solid #007bff;
+            background: rgba(255, 255, 255, 0.9);
+        }
+
+        .draggable:hover .delete-btn {
+            display: block;
+        }
+
+        .delete-btn {
+            position: absolute;
+            top: -10px;
+            right: -10px;
+            background: #ff0000;
+            color: #fff;
+            border: none;
+            border-radius: 50%;
+            width: 20px;
+            height: 20px;
+            display: none;
+            cursor: pointer;
+            font-size: 12px;
+            line-height: 20px;
+            text-align: center;
+        }
+
+        .draggable table {
+            border-collapse: collapse;
+        }
+
+        .draggable table,
+        .draggable th,
+        .draggable td {
+            border: 1px solid #000;
+            padding: 5px;
+        }
+
+        .stamp {
+            width: 50px;
+            height: 50px;
+            background: #ff0000;
+            color: #fff;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border-radius: 4px;
+        }
+
+        .pdf-controls {
+            padding: 10px;
+            display: flex;
+            gap: 10px;
+            justify-content: center;
+        }
+
+        .pdf-controls button {
+            padding: 8px 16px;
+            background: #007bff;
+            color: #fff;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+
+        .pdf-controls button:hover {
+            background: #0056b3;
+        }
+
+        .right-sidebar {
+            width: 250px;
+            padding: 10px;
+            background: #f8f8f8;
+            border-left: 1px solid #ccc;
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+        }
+
+        .blocks-section h3,
+        .fillable-fields-section h3 {
+            margin: 0 0 10px;
+            font-size: 16px;
+        }
+
+        .block,
+        .field-option {
+            padding: 10px;
+            margin: 5px 0;
+            background: #e0e0e0;
+            cursor: move;
+            text-align: center;
+            border-radius: 4px;
+        }
+
+        .block:hover,
+        .field-option:hover {
+            background: #d0d0d0;
+        }
+
+        .fillable-fields-section select {
+            width: 100%;
+            padding: 5px;
+            margin-bottom: 10px;
+        }
+
+        #loading-indicator {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0, 0, 0, 0.5);
+            color: white;
+            display: none;
+            justify-content: center;
+            align-items: center;
+            z-index: 9999;
+        }
+    </style>
+    <!-- Load PDF.js -->
+    <script src="https://unpkg.com/pdfjs-dist@2.11.338/build/pdf.min.js"></script>
+    <!-- Load PDF.js Worker -->
+    <script src="https://unpkg.com/pdfjs-dist@2.11.338/build/pdf.worker.min.js"></script>
+    <!-- Load Interact.js -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/interact.js/1.10.11/interact.min.js"></script>
+    <!-- Load pdf-lib -->
+    <script src="https://unpkg.com/pdf-lib@1.17.1/dist/pdf-lib.min.js"></script>
+    <!-- Load downloadjs -->
+    <script src="https://unpkg.com/downloadjs@1.4.7"></script>
+</head>
+
+<body>
+    <div id="upload-section" class="upload-section">
+        <h1>Upload PDF</h1>
+        <input type="file" id="pdf-upload" accept="application/pdf">
+    </div>
+
+    <div id="editor-section" class="editor-container" style="display: none;">
+        <!-- Left Sidebar (Document Preview) -->
+        <div class="left-sidebar">
+            <h3>Document</h3>
+            <div class="preview-pages"></div>
+        </div>
+
+        <!-- Main PDF Area -->
+        <div class="pdf-area">
+            <div class="pdf-header">
+                <span>Sample.pdf</span>
+                <button class="save-btn" id="save-pdf">Save</button>
+            </div>
+            <div class="pdf-container" id="pdf-container"></div>
+            <div class="pdf-controls">
+                <button id="prev-page">Previous</button>
+                <button id="next-page">Next</button>
+            </div>
+        </div>
+
+        <!-- Right Sidebar (Blocks and Fillable Fields) -->
+        <div class="right-sidebar">
+            <div class="blocks-section">
+                <h3>Blocks</h3>
+                <div class="block" data-type="text">Text</div>
+                <div class="block" data-type="table">Table</div>
+                <div class="block" data-type="signature">Signature</div>
+                <div class="block" data-type="stamp">Stamp</div>
+                <div class="block" data-type="number">Number</div>
+                <div class="block" data-type="date">Date</div>
+                <div class="block" data-type="checkbox">Checkbox</div>
+                <div class="block" data-type="radio">Radio</div>
+            </div>
+            <div class="fillable-fields-section">
+                <h3>Fillable Fields For</h3>
+                <select>
+                    <option>Jyoti Panchal</option>
+                </select>
+                <div class="field-option" data-type="signature">Signature</div>
+                <div class="field-option" data-type="initials">Initials</div>
+                <div class="field-option" data-type="text">Text</div>
+                <div class="field-option" data-type="number">Number</div>
+                <div class="field-option" data-type="date">Date</div>
+                <div class="field-option" data-type="checkbox">Checkbox</div>
+                <div class="field-option" data-type="radio">Radio</div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const { PDFDocument, rgb, StandardFonts } = PDFLib;
+
+        // Set the workerSrc for PDF.js to fix the "GlobalWorkerOptions.workerSrc" error
+        pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://unpkg.com/pdfjs-dist@2.11.338/build/pdf.worker.min.js';
+
+        let pdfDoc = null;
+        let originalPdfBytes = null;
+        let pdfJsDoc = null;
+        let scale = 1.5;
+        let currentPage = 1;
+        let fields = [];
+
+        // Add a loading indicator
+        function showLoading(show) {
+            const loadingEl = document.getElementById('loading-indicator') || createLoadingIndicator();
+            loadingEl.style.display = show ? 'flex' : 'none';
+        }
+
+        function createLoadingIndicator() {
+            const loadingEl = document.createElement('div');
+            loadingEl.id = 'loading-indicator';
+            loadingEl.innerHTML = 'Processing PDF...';
+            document.body.appendChild(loadingEl);
+            return loadingEl;
+        }
+
+        // Validate that the file is a PDF
+        function validatePdf(file) {
+            if (!file) return false;
+            if (file.type !== 'application/pdf') {
+                alert('Please upload a valid PDF file.');
+                return false;
+            }
+            return true;
+        }
+
+        document.getElementById('pdf-upload').addEventListener('change', async (event) => {
+            const file = event.target.files[0];
+            if (!validatePdf(file)) return;
+
+            showLoading(true);
+
+            try {
+                // Read the file as ArrayBuffer
+                const arrayBuffer = await file.arrayBuffer();
+
+                // Store the original bytes
+                originalPdfBytes = arrayBuffer;
+
+                // Load with pdf-lib to validate
+                pdfDoc = await PDFDocument.load(originalPdfBytes);
+
+                // Load with PDF.js for display
+                const loadingTask = pdfjsLib.getDocument({ data: arrayBuffer });
+                pdfJsDoc = await loadingTask.promise;
+
+                await renderPdf();
+                renderPageThumbnails();
+                document.getElementById('editor-section').style.display = 'flex';
+                document.getElementById('upload-section').style.display = 'none';
+            } catch (error) {
+                console.error('Error loading PDF:', error);
+                alert('Failed to load the PDF. Please try again.');
+            } finally {
+                showLoading(false);
+            }
+        });
+
+        async function renderPdf() {
+            const pdfContainer = document.getElementById('pdf-container');
+            pdfContainer.innerHTML = '';
+
+            const page = await pdfJsDoc.getPage(currentPage);
+            const viewport = page.getViewport({ scale });
+
+            const pageDiv = document.createElement('div');
+            pageDiv.className = 'pdf-page';
+            pageDiv.dataset.pageIndex = currentPage - 1;
+            pageDiv.style.position = 'relative';
+            pageDiv.style.marginBottom = '20px';
+            pageDiv.style.boxShadow = '0 2px 5px rgba(0,0,0,0.1)';
+
+            const canvas = document.createElement('canvas');
+            const context = canvas.getContext('2d');
+            canvas.width = viewport.width;
+            canvas.height = viewport.height;
+
+            pageDiv.style.width = `${viewport.width}px`;
+            pageDiv.style.height = `${viewport.height}px`;
+
+            const renderContext = {
+                canvasContext: context,
+                viewport: viewport
+            };
+
+            pageDiv.appendChild(canvas);
+            pdfContainer.appendChild(pageDiv);
+
+            await page.render(renderContext).promise;
+
+            // Render fields for the current page
+            renderFields();
+        }
+
+        async function renderPageThumbnails() {
+            const previewPages = document.querySelector('.preview-pages');
+            previewPages.innerHTML = '';
+
+            for (let pageNum = 1; pageNum <= pdfJsDoc.numPages; pageNum++) {
+                const page = await pdfJsDoc.getPage(pageNum);
+                const viewport = page.getViewport({ scale: 0.2 });
+                const canvas = document.createElement('canvas');
+                const context = canvas.getContext('2d');
+
+                canvas.height = viewport.height;
+                canvas.width = viewport.width;
+                canvas.className = 'preview-page';
+
+                const renderContext = {
+                    canvasContext: context,
+                    viewport: viewport,
+                };
+                await page.render(renderContext).promise;
+
+                previewPages.appendChild(canvas);
+            }
+        }
+
+        function renderFields() {
+            const pageDiv = document.getElementById('pdf-container').querySelector('.pdf-page');
+            if (!pageDiv) return;
+
+            // Remove existing fields
+            const existingFields = pageDiv.querySelectorAll('.draggable');
+            existingFields.forEach(field => field.remove());
+
+            // Render fields for the current page
+            fields
+                .filter(field => field.pageIndex === currentPage - 1)
+                .forEach(field => {
+                    createField(field.type, field.x, field.y, field.text, pageDiv, field.id, field.width, field.height);
+                });
+        }
+
+        // Set up drag-and-drop for blocks and field options
+        interact('.block, .field-option').draggable({
+            onstart: (event) => {
+                event.target.classList.add('dragging');
+            },
+            onmove: (event) => {
+                const target = event.target;
+                const x = (parseFloat(target.getAttribute('data-x')) || 0) + event.dx;
+                const y = (parseFloat(target.getAttribute('data-y')) || 0) + event.dy;
+
+                target.style.transform = `translate(${x}px, ${y}px)`;
+                target.setAttribute('data-x', x);
+                target.setAttribute('data-y', y);
+            },
+            onend: (event) => {
+                event.target.classList.remove('dragging');
+                event.target.style.transform = 'translate(0px, 0px)';
+                event.target.setAttribute('data-x', 0);
+                event.target.setAttribute('data-y', 0);
+            },
+        });
+
+        interact('.pdf-page').dropzone({
+            ondrop: (event) => {
+                const type = event.relatedTarget.getAttribute('data-type');
+                const pageDiv = event.target;
+                const rect = pageDiv.getBoundingClientRect();
+                // Use event.clientX and event.clientY directly from the drop event
+                const x = event.clientX - rect.left;
+                const y = event.clientY - rect.top;
+
+                const fieldId = `field-${Date.now()}`;
+                fields.push({ id: fieldId, type, x, y, pageIndex: currentPage - 1, text: '', width: 100, height: 30 });
+                createField(type, x, y, '', pageDiv, fieldId, 100, 30);
+            },
+        });
+
+        function createField(type, x, y, text, container, fieldId, width, height) {
+            const field = document.createElement('div');
+            field.className = 'draggable';
+            field.style.position = 'absolute';
+            field.style.left = `${x}px`;
+            field.style.top = `${y}px`;
+            field.style.width = `${width}px`;
+            field.style.height = `${height}px`;
+            field.dataset.id = fieldId;
+            field.dataset.pageIndex = container.dataset.pageIndex;
+
+            let fieldHtml = '';
+            switch (type) {
+                case 'text':
+                    field.contentEditable = true;
+                    field.textContent = text || 'Click to edit text';
+                    break;
+                case 'table':
+                    field.innerHTML = `
+        <table>
+          <tr><th>Header 1</th><th>Header 2</th></tr>
+          <tr><td>Row 1</td><td>Row 1</td></tr>
+          <tr><td>Row 2</td><td>Row 2</td></tr>
+        </table>
+      `;
+                    break;
+                case 'signature':
+                    field.innerHTML = `
+        <input type="file" accept="image/*" onchange="this.parentElement.querySelector('img').src = URL.createObjectURL(this.files[0])" />
+        <img src="" style="max-width: 100px; max-height: 50px;" />
+      `;
+                    break;
+                case 'stamp':
+                    field.classList.add('stamp');
+                    field.textContent = 'Stamp';
+                    break;
+                case 'number':
+                    field.innerHTML = `<input type="number" placeholder="Number" />`;
+                    break;
+                case 'date':
+                    field.innerHTML = `<input type="date" />`;
+                    break;
+                case 'checkbox':
+                    field.innerHTML = `<input type="checkbox" />`;
+                    break;
+                case 'radio':
+                    field.innerHTML = `<input type="radio" name="radio-group-${fieldId}" />`;
+                    break;
+                case 'initials':
+                    field.contentEditable = true;
+                    field.textContent = text || 'Initials';
+                    break;
+            }
+
+            // Add delete button
+            const deleteBtn = document.createElement('button');
+            deleteBtn.className = 'delete-btn';
+            deleteBtn.textContent = 'X';
+            deleteBtn.onclick = (e) => {
+                e.stopPropagation();
+                fields = fields.filter(f => f.id !== fieldId);
+                field.remove();
+            };
+            field.appendChild(deleteBtn);
+
+            container.appendChild(field);
+            makeElementDraggableAndResizable(field);
+
+            // Update field text on input for contentEditable elements
+            field.addEventListener('input', () => {
+                const fieldData = fields.find(f => f.id === fieldId);
+                if (fieldData) {
+                    fieldData.text = field.textContent || '';
+                }
+            });
+
+            // Add event listeners for input elements
+            if (field.querySelector('input')) {
+                field.querySelector('input').addEventListener('change', (e) => {
+                    const fieldData = fields.find(f => f.id === fieldId);
+                    if (fieldData) {
+                        if (e.target.type === 'checkbox' || e.target.type === 'radio') {
+                            fieldData.text = e.target.checked.toString();
+                        } else {
+                            fieldData.text = e.target.value || '';
+                        }
+                    }
+                });
+            }
+
+            return field;
+        }
+
+        function makeElementDraggableAndResizable(element) {
+            interact(element)
+                .draggable({
+                    inertia: false,
+                    modifiers: [
+                        interact.modifiers.restrictRect({
+                            restriction: 'parent',
+                            endOnly: true
+                        })
+                    ],
+                    autoScroll: true,
+                    listeners: {
+                        start(event) {
+                            // Prevent dragging when the target is an input or contenteditable element being edited
+                            if (event.target.tagName === 'INPUT' || (event.target.isContentEditable && document.activeElement === event.target)) {
+                                event.preventDefault();
+                            }
+                        },
+                        move: dragMoveListener,
+                        end: function (event) {
+                            const fieldId = event.target.dataset.id;
+                            const field = fields.find(f => f.id === fieldId);
+                            const actualElement = event.target;
+
+                            if (actualElement && field) {
+                                const rect = actualElement.getBoundingClientRect();
+                                const parentRect = actualElement.parentElement.getBoundingClientRect();
+                                const x = parseFloat(actualElement.style.left);
+                                const y = parseFloat(actualElement.style.top);
+
+                                // Update field data with the final position
+                                field.x = x;
+                                field.y = y;
+                            }
+                        }
+                    }
+                })
+                .resizable({
+                    edges: { left: true, right: true, bottom: true, top: true },
+                    restrictEdges: {
+                        outer: 'parent',
+                        endOnly: true
+                    },
+                    inertia: false,
+                    listeners: {
+                        move: resizeMoveListener,
+                        end: function (event) {
+                            const fieldId = event.target.dataset.id;
+                            const field = fields.find(f => f.id === fieldId);
+                            if (field) {
+                                // Update field dimensions after resize
+                                field.width = parseFloat(event.target.style.width);
+                                field.height = parseFloat(event.target.style.height);
+                            }
+                        }
+                    }
+                });
+
+            // Ensure contenteditable fields can be focused
+            if (element.isContentEditable) {
+                element.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    element.focus();
+                });
+            }
+        }
+
+        function dragMoveListener(event) {
+            const target = event.target;
+            const x = (parseFloat(target.getAttribute('data-x')) || 0) + event.dx;
+            const y = (parseFloat(target.getAttribute('data-y')) || 0) + event.dy;
+
+            // Update transform
+            target.style.transform = `translate(${x}px, ${y}px)`;
+            target.setAttribute('data-x', x);
+            target.setAttribute('data-y', y);
+
+            // Update field position in our fields array
+            const fieldId = target.dataset.id;
+            const field = fields.find(f => f.id === fieldId);
+            if (field) {
+                const rect = target.getBoundingClientRect();
+                const parentRect = target.parentElement.getBoundingClientRect();
+                field.x = parseFloat(target.style.left) + x;
+                field.y = parseFloat(target.style.top) + y;
+            }
+        }
+
+        function resizeMoveListener(event) {
+            const target = event.target;
+            const x = (parseFloat(target.getAttribute('data-x')) || 0);
+            const y = (parseFloat(target.getAttribute('data-y')) || 0);
+
+            Object.assign(target.style, {
+                width: `${event.rect.width}px`,
+                height: `${event.rect.height}px`,
+                transform: `translate(${x + event.deltaRect.left}px, ${y + event.deltaRect.top}px)`
+            });
+
+            target.setAttribute('data-x', x + event.deltaRect.left);
+            target.setAttribute('data-y', y + event.deltaRect.top);
+
+            // Update field data
+            const fieldId = target.dataset.id;
+            const field = fields.find(f => f.id === fieldId);
+            if (field) {
+                field.width = event.rect.width;
+                field.height = event.rect.height;
+
+                // Update position as well since resizing can move the element
+                const actualX = parseFloat(target.style.left) + (x + event.deltaRect.left);
+                const actualY = parseFloat(target.style.top) + (y + event.deltaRect.top);
+
+                field.x = actualX;
+                field.y = actualY;
+            }
+        }
+
+        document.getElementById('prev-page').addEventListener('click', async () => {
+            if (currentPage > 1) {
+                currentPage--;
+                await renderPdf();
+            }
+        });
+
+        document.getElementById('next-page').addEventListener('click', async () => {
+            if (currentPage < pdfJsDoc.numPages) {
+                currentPage++;
+                await renderPdf();
+            }
+        });
+
+        // Update the save button click handler
+        document.getElementById('save-pdf').addEventListener('click', async () => {
+            if (!pdfDoc || !originalPdfBytes) {
+                alert('No PDF loaded.');
+                return;
+            }
+
+            showLoading(true);
+
+            try {
+                const editedPdfDoc = await PDFDocument.load(originalPdfBytes);
+                const helveticaFont = await editedPdfDoc.embedFont(StandardFonts.Helvetica);
+
+                // Process all fields
+                for (const field of fields) {
+                    try {
+                        const page = editedPdfDoc.getPages()[field.pageIndex];
+                        if (!page) continue;
+
+                        const { height: pageHeight } = page.getSize();
+                        const fieldElement = document.querySelector(`.draggable[data-id="${field.id}"]`);
+                        console.log('field.type', field.type);
+                        console.log('element', fieldElement.childNodes[0]?.textContent?.trim() || fieldElement.textContent?.trim() || '');
+                        if (!fieldElement) continue;
+
+                        // Get base position
+                        let baseX = parseFloat(fieldElement.style.left) || 0;
+                        let baseY = parseFloat(fieldElement.style.top) || 0;
+                        console.log('base', baseX, baseY);
+
+                        // Add transform offset
+                        const transformX = parseFloat(fieldElement.getAttribute('data-x')) || 0;
+                        const transformY = parseFloat(fieldElement.getAttribute('data-y')) || 0;
+                        console.log('transform', transformX, transformY);
+
+                        // Calculate final position
+                        const finalX = (baseX + transformX) / scale;
+                        const finalY = pageHeight - ((baseY + transformY) / scale);
+                        console.log('final', finalX, finalY);
+
+                        // Validate coordinates
+                        if (isNaN(finalX) || isNaN(finalY)) {
+                            console.error('Invalid coordinates for field:', field.id, {
+                                baseX, baseY, transformX, transformY, scale
+                            });
+                            continue;
+                        }
+
+                        switch (field.type) {
+                            case 'text':
+                                const text = fieldElement.childNodes[0]?.textContent?.trim() || fieldElement.textContent?.trim() || '';
+                                console.log('text-feild', text);
+                                page.drawText(text, {
+                                    x: (baseX + transformX) / scale,
+                                    y: pageHeight - ((baseY + transformY) / scale) - 12,
+                                    size: 12,
+                                    font: helveticaFont,
+                                    color: rgb(0, 0, 0)
+                                });
+                                break;
+                            case 'initials':
+                                if (fieldElement.isContentEditable) {
+                                    const text = fieldElement.textContent?.trim() || '';
+                                    if (text && text !== 'Click to edit text') {
+                                        // Use getBoundingClientRect for accurate positioning
+                                        const rect = fieldElement.getBoundingClientRect();
+                                        const parentRect = fieldElement.parentElement.getBoundingClientRect();
+
+                                        // Calculate position in PDF coordinates
+                                        const x = (rect.left - parentRect.left) / scale;
+                                        const y = pageHeight - ((rect.top - parentRect.top) / scale) - 12; // Adjust for text height
+
+                                        page.drawText(text, {
+                                            x: x,
+                                            y: y,
+                                            size: 12,
+                                            font: helveticaFont,
+                                            color: rgb(0, 0, 0)
+                                        });
+                                    }
+                                }
+                                break;
+
+                            case 'number':
+                                const numberInput = fieldElement.querySelector('input[type="number"]');
+                                if (numberInput?.value) {
+                                    const text = numberInput.value.toString();
+                                    page.drawText(text, {
+                                        x: (baseX + transformX) / scale,
+                                        y: pageHeight - ((baseY + transformY) / scale) - 12,
+                                        size: 12,
+                                        font: helveticaFont,
+                                        color: rgb(0, 0, 0)
+                                    });
+                                }
+                                break;
+
+                            case 'date':
+                                const dateInput = fieldElement.querySelector('input[type="date"]');
+                                if (dateInput?.value) {
+                                    page.drawText(dateInput.value, {
+                                        x: (baseX + transformX) / scale,
+                                        y: pageHeight - ((baseY + transformY) / scale) - 12,
+                                        size: 12,
+                                        font: helveticaFont,
+                                        color: rgb(0, 0, 0)
+                                    });
+                                }
+                                break;
+
+                            case 'checkbox':
+                                const checkbox = fieldElement.querySelector('input[type="checkbox"]');
+                                if (checkbox) {
+                                    page.drawText(checkbox.checked ? '☒' : '☐', {
+                                        x: (baseX + transformX) / scale,
+                                        y: pageHeight - ((baseY + transformY) / scale) - 12,
+                                        size: 14,
+                                        font: helveticaFont,
+                                        color: rgb(0, 0, 0)
+                                    });
+                                }
+                                break;
+
+                            case 'radio':
+                                const radio = fieldElement.querySelector('input[type="radio"]');
+                                if (radio) {
+                                    page.drawText(radio.checked ? '⚫' : '○', {
+                                        x: (baseX + transformX) / scale,
+                                        y: pageHeight - ((baseY + transformY) / scale) - 12,
+                                        size: 12,
+                                        font: helveticaFont,
+                                        color: rgb(0, 0, 0)
+                                    });
+                                }
+                                break;
+
+                            case 'table':
+                                const table = fieldElement.querySelector('table');
+                                if (table) {
+                                    const rows = table.querySelectorAll('tr');
+                                    let yOffset = 0;
+                                    rows.forEach(row => {
+                                        let xOffset = 0;
+                                        const cells = row.querySelectorAll('td, th');
+                                        cells.forEach(cell => {
+                                            const text = cell.textContent.trim();
+                                            if (text) {
+                                                page.drawText(text, {
+                                                    x: (baseX + transformX + xOffset) / scale,
+                                                    y: pageHeight - ((baseY + transformY + yOffset) / scale) - 12,
+                                                    size: 10,
+                                                    font: helveticaFont,
+                                                    color: rgb(0, 0, 0)
+                                                });
+                                            }
+                                            xOffset += 100; // Adjust cell spacing
+                                        });
+                                        yOffset += 20; // Adjust row spacing
+                                    });
+                                }
+                                break;
+
+                            case 'stamp':
+                                page.drawText('STAMP', {
+                                    x: (baseX + transformX) / scale,
+                                    y: pageHeight - ((baseY + transformY) / scale) - 12,
+                                    size: 16,
+                                    font: helveticaFont,
+                                    color: rgb(1, 0, 0) // Red color for stamp
+                                });
+                                break;
+
+                            default:
+                                console.warn(`Unhandled field type: ${field.type}`);
+                                break;
+                        }
+
+                    } catch (pageError) {
+                        console.error(`Error adding field to page ${field.pageIndex}:`, pageError);
+                    }
+                }
+
+                const modifiedPdfBytes = await editedPdfDoc.save();
+                const blob = new Blob([modifiedPdfBytes], { type: 'application/pdf' });
+                const url = URL.createObjectURL(blob);
+                const downloadLink = document.createElement('a');
+                downloadLink.href = url;
+                downloadLink.download = 'edited-document.pdf';
+                document.body.appendChild(downloadLink);
+                downloadLink.click();
+                document.body.removeChild(downloadLink);
+                URL.revokeObjectURL(url);
+
+                alert('PDF saved successfully!');
+            } catch (error) {
+                console.error('Error saving PDF:', error);
+                alert('Failed to save PDF: ' + error.message);
+            } finally {
+                showLoading(false);
+            }
+        });
+
+
+    </script>
+</body>
+
+</html>
